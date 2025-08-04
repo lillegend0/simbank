@@ -101,10 +101,8 @@ def main():
                 alert_sent = prev_data.get("alert_sent", False)
 
                 if curr_value != prev_value:
-                    since = now
-                    if curr_value == "Y":
-                        alert_sent = False
                     log_change(f"{key} изменился: {prev_value} → {curr_value}")
+                    since = now
 
                 if curr_value == "N":
                     down_since = datetime.fromisoformat(since)
