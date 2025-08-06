@@ -9,10 +9,14 @@ from dotenv import find_dotenv, load_dotenv
 load_dotenv(find_dotenv())
 
 MOSCOW_TZ = timezone(timedelta(hours=3))
+LOG_FILE = os.getenv("LOG_FILE", "status.log")
+
+def ensure_log_directory_exists():
+    pass  # Нет необходимости создавать директорию, если LOG_FILE просто "status.log"
 
 def send_telegram(message):
     url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage"
-    data = {"chat_id": CHAT_ID, "text": message, "parse_mode": "Markdown"}
+    data = {"chat_id": CHAT_ID, "text": message, "parse_mode": "HTML"}
     try:
         resp = requests.post(url, data=data)
         resp.raise_for_status()
@@ -22,8 +26,12 @@ def send_telegram(message):
 
 def log_change(message):
     timestamp = datetime.now(MOSCOW_TZ).strftime("%Y-%m-%d %H:%M:%S")
-    with open("status.log", "a") as log_file:
-        log_file.write(f"[{timestamp}] {message}\n")
+    ensure_log_directory_exists()
+    try:
+        with open(LOG_FILE, "a") as log_file:
+            log_file.write(f"[{timestamp}] {message}\n")
+    except Exception as e:
+        print(f"❗ Ошибка записи лога: {e}")
 
 def get_status_html():
     url = f"{SIMBANK_IP}/default/en_US/status.html"
@@ -51,11 +59,11 @@ def parse_html_status(html_text):
     }
 
     summary = (
-        f"🧩 *Статус SIM-карты (порт {PORT}):*\n"
-        f"📍 SIM Inserted: `{statuses['gsm_sim']}`\n"
-        f"🔗 Module Status: `{statuses['module_status']}`\n"
-        f"⚠ GSM Status: `{statuses['gsm_status']}`\n"
-        f"📡 Status Line: `{statuses['status_line']}`\n"
+        f"🧩 <b>Статус SIM-карты (порт {PORT}):</b>\n"
+        f"📍 SIM Inserted: <code>{statuses['gsm_sim']}</code>\n"
+        f"🔗 <b>Module Status:</b> <code>{statuses['module_status']}</code>\n"
+        f"⚠ <b>GSM Status:</b> <code>{statuses['gsm_status']}</code>\n"
+        f"📡 <b>Status Line:</b> <code>{statuses['status_line']}</code>\n"
     )
     return summary, statuses
 
@@ -79,11 +87,10 @@ def save_statuses(statuses):
 
 def main():
     previous_statuses = load_previous_statuses()
-
     html_data = get_status_html()
 
     if html_data.startswith("ERROR"):
-        send_telegram(f"❗ Ошибка при получении статуса:\n{html_data}")
+        send_telegram(f"❗ <b>Ошибка при получении статуса:</b>\n<code>{html_data}</code>")
         print(html_data)
         log_change(f"Ошибка получения HTML: {html_data}")
         return
@@ -113,12 +120,12 @@ def main():
 
             if datetime.now(timezone.utc) - down_since > timedelta(minutes=2):
                 if not alert_sent:
-                    alerts.append(f"❌ *{key}* отключено более 2 минут.")
+                    alerts.append(f"❌ <b>{key}</b> отключено более 2 минут.")
                     alert_sent = True
                     log_change(f"{key} отключено более 2 минут")
 
         elif curr_value == "Y" and prev_value == "N":
-            alerts.append(f"✅ *{key}* восстановилось.")
+            alerts.append(f"✅ <b>{key}</b> восстановилось.")
             alert_sent = False
             log_change(f"{key} восстановилось")
 
@@ -133,7 +140,7 @@ def main():
         send_telegram(f"{alert_text}\n\n{summary}")
         log_change(f"Отправлено уведомление: {alert_text.replace(chr(10), ' | ')}")
     else:
-        print("Изменений нет или не прошло 2 минуты.")
+        print("Изменений нет.")
 
     save_statuses(updated_statuses)
 
