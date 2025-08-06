@@ -80,63 +80,63 @@ def save_statuses(statuses):
 
 def main():
     previous_statuses = load_previous_statuses()
-    while True:
-        html_data = get_status_html()
 
-        if html_data.startswith("ERROR"):
-            send_telegram(f"❗ Ошибка при получении статуса:\n{html_data}")
-            print(html_data)
-            log_change(f"Ошибка получения HTML: {html_data}")
-        else:
-            summary, current_raw = parse_html_status(html_data)
-            now = datetime.now(timezone.utc).isoformat()
+    html_data = get_status_html()
 
-            updated_statuses = {}
-            alerts = []
+    if html_data.startswith("ERROR"):
+        send_telegram(f"❗ Ошибка при получении статуса:\n{html_data}")
+        print(html_data)
+        log_change(f"Ошибка получения HTML: {html_data}")
+        return
 
-            for key, curr_value in current_raw.items():
-                prev_data = previous_statuses.get(key, {})
-                prev_value = prev_data.get("value")
-                since = prev_data.get("since", now)
-                alert_sent = prev_data.get("alert_sent", False)
+    summary, current_raw = parse_html_status(html_data)
+    now = datetime.now(timezone.utc).isoformat()
 
-                if curr_value != prev_value:
-                    log_change(f"{key} изменился: {prev_value} → {curr_value}")
-                    since = now
+    updated_statuses = {}
+    alerts = []
 
-                if curr_value == "N":
-                    down_since = datetime.fromisoformat(since)
-                    if down_since.tzinfo is None:
-                        down_since = down_since.replace(tzinfo=timezone.utc)
+    for key, curr_value in current_raw.items():
+        prev_data = previous_statuses.get(key, {})
+        prev_value = prev_data.get("value")
+        since = prev_data.get("since", now)
+        alert_sent = prev_data.get("alert_sent", False)
 
-                    if datetime.now(timezone.utc) - down_since > timedelta(minutes=2):
-                        if not alert_sent:
-                            alerts.append(f"❌ *{key}* отключено более 2 минут.")
-                            alert_sent = True
-                            log_change(f"{key} отключено более 2 минут")
+        if curr_value != prev_value:
+            since = now
+            if curr_value == "Y":
+                alert_sent = False
+            log_change(f"{key} изменился: {prev_value} → {curr_value}")
 
-                elif curr_value == "Y" and prev_value == "N":
-                    alerts.append(f"✅ *{key}* восстановилось.")
-                    alert_sent = False
-                    log_change(f"{key} восстановилось")
+        if curr_value == "N":
+            down_since = datetime.fromisoformat(since)
+            if down_since.tzinfo is None:
+                down_since = down_since.replace(tzinfo=timezone.utc)
 
-                updated_statuses[key] = {
-                    "value": curr_value,
-                    "since": since,
-                    "alert_sent": alert_sent
-                }
+            if datetime.now(timezone.utc) - down_since > timedelta(minutes=2):
+                if not alert_sent:
+                    alerts.append(f"❌ *{key}* отключено более 2 минут.")
+                    alert_sent = True
+                    log_change(f"{key} отключено более 2 минут")
 
-            if alerts:
-                alert_text = "\n".join(alerts)
-                send_telegram(f"{alert_text}\n\n{summary}")
-                log_change(f"Отправлено уведомление: {alert_text.replace(chr(10), ' | ')}")
-            else:
-                print("Изменений нет или не прошло 2 минуты.")
+        elif curr_value == "Y" and prev_value == "N":
+            alerts.append(f"✅ *{key}* восстановилось.")
+            alert_sent = False
+            log_change(f"{key} восстановилось")
 
-            previous_statuses = updated_statuses
-            save_statuses(updated_statuses)
+        updated_statuses[key] = {
+            "value": curr_value,
+            "since": since,
+            "alert_sent": alert_sent
+        }
 
-        time.sleep(60)
+    if alerts:
+        alert_text = "\n".join(alerts)
+        send_telegram(f"{alert_text}\n\n{summary}")
+        log_change(f"Отправлено уведомление: {alert_text.replace(chr(10), ' | ')}")
+    else:
+        print("Изменений нет или не прошло 2 минуты.")
+
+    save_statuses(updated_statuses)
 
 if __name__ == "__main__":
     main()
