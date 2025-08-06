@@ -3,8 +3,10 @@ import json
 import os
 from bs4 import BeautifulSoup
 from datetime import datetime, timedelta, timezone
-from config import SIMBANK_IP, USERNAME, PASSWORD, BOT_TOKEN, CHAT_ID, PORT, STATUS_FILE
 from dotenv import find_dotenv, load_dotenv
+load_dotenv(find_dotenv())
+
+from config import SIMBANK_IP, USERNAME, PASSWORD, BOT_TOKEN, CHAT_ID, PORT, STATUS_FILE
 
 load_dotenv(find_dotenv())
 
@@ -21,7 +23,9 @@ def send_telegram(message):
         resp = requests.post(url, data=data)
         resp.raise_for_status()
     except Exception as e:
-        print(f"Ошибка отправки Telegram: {e}")
+        # Сохраняем ошибку в отдельный лог
+        with open("/tmp/telegram_error.log", "a") as f:
+            f.write(f"[{datetime.now()}] Ошибка отправки Telegram: {e}\n")
         log_change(f"❗ Ошибка отправки Telegram: {e}")
 
 def log_change(message):
@@ -86,6 +90,8 @@ def save_statuses(statuses):
         log_change(f"❗ Ошибка при сохранении статусов: {e}")
 
 def main():
+    with open("/tmp/debug_cron.log", "a") as f:
+        f.write(f"[{datetime.now()}] Скрипт запущен из cron\n")
     previous_statuses = load_previous_statuses()
     html_data = get_status_html()
 
