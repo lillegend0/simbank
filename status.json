@@ -1,0 +1,22 @@
+{
+    "gsm_sim": {
+        "value": "N",
+        "since": "2025-08-06T15:49:27.220919+00:00",
+        "alert_sent": true
+    },
+    "module_status": {
+        "value": "N",
+        "since": "2025-08-06T15:50:13.274508+00:00",
+        "alert_sent": false
+    },
+    "gsm_status": {
+        "value": "N",
+        "since": "2025-08-06T15:47:30.883145+00:00",
+        "alert_sent": true
+    },
+    "status_line": {
+        "value": "N",
+        "since": "2025-08-06T15:47:30.883145+00:00",
+        "alert_sent": true
+    }
+}
