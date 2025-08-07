@@ -7,7 +7,6 @@ from typing import Dict, Tuple
 from config import SIMBANK_IP, USERNAME, PASSWORD, BOT_TOKEN, CHAT_ID, PORT, STATUS_FILE
 from dotenv import load_dotenv, find_dotenv
 
-# Загрузка переменных окружения
 load_dotenv(find_dotenv())
 LOG_FILE = os.getenv("LOG_FILE", "status.log")
 MOSCOW_TZ = timezone(timedelta(hours=3))
