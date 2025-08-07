@@ -133,12 +133,10 @@ def monitor():
 
         # Проверка: если отключено ("N") > 2 минут и не отправляли
         if curr_norm == "N":
-            down_since = datetime.fromisoformat(since).replace(tzinfo=timezone.utc)
-            if datetime.now(timezone.utc) - down_since > timedelta(minutes=2):
-                if not alert_sent:
-                    alerts.append(f"❌ <b>{key}</b> отключено более 2 минут.")
-                    alert_sent = True
-                    log(f"{key} отключено более 2 минут")
+            if not alert_sent:
+                alerts.append(f"❌ <b>{key}</b> отключено.")
+                alert_sent = True
+                log(f"{key} отключено")
 
         # ✅ Восстановление: если раньше было "N", а теперь не "N"
         elif prev_norm == "N" and curr_norm != "N":
