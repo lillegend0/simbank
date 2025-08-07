@@ -7,14 +7,17 @@ from typing import Dict, Tuple
 from config import SIMBANK_IP, USERNAME, PASSWORD, BOT_TOKEN, CHAT_ID, PORT, STATUS_FILE
 from dotenv import load_dotenv, find_dotenv
 
+# Загрузка переменных окружения
 load_dotenv(find_dotenv())
 LOG_FILE = os.getenv("LOG_FILE", "status.log")
 MOSCOW_TZ = timezone(timedelta(hours=3))
+
 
 def ensure_log_dir():
     log_dir = os.path.dirname(LOG_FILE)
     if log_dir:
         os.makedirs(log_dir, exist_ok=True)
+
 
 def log(message: str):
     ensure_log_dir()
@@ -24,6 +27,7 @@ def log(message: str):
             f.write(f"[{timestamp}] {message}\n")
     except Exception as e:
         print(f"❗ Ошибка записи в лог: {e}")
+
 
 def send_telegram(message: str):
     url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage"
@@ -40,6 +44,7 @@ def send_telegram(message: str):
         print(error)
         log(f"❗ {error}")
 
+
 def get_status_page() -> str:
     url = f"{SIMBANK_IP}/default/en_US/status.html"
     try:
@@ -51,12 +56,13 @@ def get_status_page() -> str:
     except Exception as e:
         return f"ERROR: {e}"
 
+
 def parse_status(html: str) -> Tuple[str, Dict[str, str]]:
     soup = BeautifulSoup(html, "html.parser")
 
     def extract(id_: str) -> str:
         el = soup.find(id=id_)
-        text = el.text.strip() if el else ""
+        text = el.text.strip() if el and el.text else ""
         return text if text else "N"
 
     statuses = {
@@ -76,6 +82,7 @@ def parse_status(html: str) -> Tuple[str, Dict[str, str]]:
 
     return summary, statuses
 
+
 def load_previous() -> Dict[str, Dict[str, str]]:
     if os.path.exists(STATUS_FILE):
         try:
@@ -85,12 +92,14 @@ def load_previous() -> Dict[str, Dict[str, str]]:
             log(f"❗ Ошибка загрузки предыдущих статусов: {e}")
     return {}
 
+
 def save_statuses(data: Dict[str, Dict[str, str]]):
     try:
         with open(STATUS_FILE, "w") as f:
             json.dump(data, f, indent=4)
     except Exception as e:
         log(f"❗ Ошибка при сохранении статусов: {e}")
+
 
 def monitor():
     previous = load_previous()
@@ -115,30 +124,31 @@ def monitor():
         since = datetime.fromisoformat(since_str)
         alert_sent = prev.get("alert_sent", False)
 
-        curr_norm = value or "N"
-        prev_norm = prev_val or "N"
+        curr_norm = value if value else "N"
+        prev_norm = prev_val if prev_val else "N"
 
-        # Если статус изменился — сбрасываем таймер и флаг
+        # Обнаружено изменение
         if curr_norm != prev_norm:
             since = now
             alert_sent = False
             log(f"{key} изменился: {prev_norm} → {curr_norm}")
 
-        # Текущее значение "N" — проверяем время
+        # Если текущий статус "N"
         if curr_norm == "N":
             duration = now - since
             if duration >= timedelta(minutes=2):
                 if not alert_sent:
                     alerts.append(f"❌ <b>{key}</b> отключено более 2 минут.")
                     alert_sent = True
-                    log(f"{key} отключено более 2 минут")
+                    log(f"{key} отключено более 2 минут.")
+                else:
+                    log(f"{key} уже алертировано.")
             else:
                 log(f"{key} отключено менее 2 минут — ожидание.")
         else:
-            # Восстановление, но только если раньше было "N"
             if prev_norm == "N":
-                log(f"{key} восстановилось до истечения 2 минут — алерт не отправлялся.")
-            alert_sent = False  # сбрасываем
+                log(f"{key} восстановилось — алерт не отправлялся.")
+            alert_sent = False  # сбросить флаг, даже если он был
 
         updated[key] = {
             "value": curr_norm,
@@ -150,10 +160,10 @@ def monitor():
         send_telegram("\n".join(alerts) + "\n\n" + summary)
         log("Уведомление отправлено: " + " | ".join(alerts))
     else:
-        print("Изменений нет или не прошло 2 минуты.")
         log("Изменений нет или не прошло 2 минуты.")
 
     save_statuses(updated)
+
 
 if __name__ == "__main__":
     monitor()
