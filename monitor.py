@@ -12,13 +12,11 @@ LOG_FILE = os.getenv("LOG_FILE", "status.log")
 MOSCOW_TZ = timezone(timedelta(hours=3))
 
 def ensure_log_dir():
-    """Создание директории логов, если необходимо."""
     log_dir = os.path.dirname(LOG_FILE)
     if log_dir:
         os.makedirs(log_dir, exist_ok=True)
 
 def log(message: str):
-    """Запись сообщения в лог-файл с таймстампом."""
     ensure_log_dir()
     timestamp = datetime.now(MOSCOW_TZ).strftime("%Y-%m-%d %H:%M:%S")
     try:
@@ -28,7 +26,6 @@ def log(message: str):
         print(f"❗ Ошибка записи в лог: {e}")
 
 def send_telegram(message: str):
-    """Отправка сообщения в Telegram."""
     url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage"
     payload = {
         "chat_id": CHAT_ID,
@@ -44,7 +41,6 @@ def send_telegram(message: str):
         log(f"❗ {error}")
 
 def get_status_page() -> str:
-    """Получение HTML-страницы со статусами симбанка."""
     url = f"{SIMBANK_IP}/default/en_US/status.html"
     try:
         response = requests.get(url, auth=(USERNAME, PASSWORD), timeout=15)
@@ -56,13 +52,12 @@ def get_status_page() -> str:
         return f"ERROR: {e}"
 
 def parse_status(html: str) -> Tuple[str, Dict[str, str]]:
-    """Парсинг HTML и получение значений статусов, пустые заменяем на 'N'."""
     soup = BeautifulSoup(html, "html.parser")
 
     def extract(id_: str) -> str:
         el = soup.find(id=id_)
         text = el.text.strip() if el else ""
-        return text if text else "N"  # заменяем пустое на "N"
+        return text if text else "N"
 
     statuses = {
         "gsm_sim": extract(f"l{PORT}_gsm_sim"),
@@ -82,7 +77,6 @@ def parse_status(html: str) -> Tuple[str, Dict[str, str]]:
     return summary, statuses
 
 def load_previous() -> Dict[str, Dict[str, str]]:
-    """Загрузка предыдущих статусов."""
     if os.path.exists(STATUS_FILE):
         try:
             with open(STATUS_FILE, "r") as f:
@@ -92,7 +86,6 @@ def load_previous() -> Dict[str, Dict[str, str]]:
     return {}
 
 def save_statuses(data: Dict[str, Dict[str, str]]):
-    """Сохранение текущих статусов."""
     try:
         with open(STATUS_FILE, "w") as f:
             json.dump(data, f, indent=4)
@@ -109,44 +102,47 @@ def monitor():
         return
 
     summary, current = parse_status(html)
-    now = datetime.now(timezone.utc).isoformat()
+    now = datetime.now(timezone.utc)
+    now_iso = now.isoformat()
 
     alerts = []
     updated = {}
 
     for key, value in current.items():
         prev = previous.get(key, {})
-        prev_val = prev.get("value", "")
-        since = prev.get("since", now)
+        prev_val = prev.get("value", "N")
+        since_str = prev.get("since", now_iso)
+        since = datetime.fromisoformat(since_str)
         alert_sent = prev.get("alert_sent", False)
 
-        # Нормализуем значения: пустое => "N"
         curr_norm = value or "N"
         prev_norm = prev_val or "N"
 
-        # Если значение изменилось — сбрасываем таймер и флаг
+        # Если статус изменился — сбрасываем таймер и флаг
         if curr_norm != prev_norm:
             since = now
             alert_sent = False
-            log(f"{key} изменился: {prev_val} → {value}")
+            log(f"{key} изменился: {prev_norm} → {curr_norm}")
 
-        # Проверка: если отключено ("N") > 2 минут и не отправляли
+        # Текущее значение "N" — проверяем время
         if curr_norm == "N":
-            if not alert_sent:
-                alerts.append(f"❌ <b>{key}</b> отключено.")
-                alert_sent = True
-                log(f"{key} отключено")
+            duration = now - since
+            if duration >= timedelta(minutes=2):
+                if not alert_sent:
+                    alerts.append(f"❌ <b>{key}</b> отключено более 2 минут.")
+                    alert_sent = True
+                    log(f"{key} отключено более 2 минут")
+            else:
+                log(f"{key} отключено менее 2 минут — ожидание.")
+        else:
+            # Восстановление, но только если раньше было "N"
+            if prev_norm == "N":
+                log(f"{key} восстановилось до истечения 2 минут — алерт не отправлялся.")
+            alert_sent = False  # сбрасываем
 
-        # ✅ Восстановление: если раньше было "N", а теперь не "N"
-        elif prev_norm == "N" and curr_norm != "N":
-            alerts.append(f"✅ <b>{key}</b> восстановилось.")
-            alert_sent = False
-            log(f"{key} восстановилось")
-
-        # Обновляем статус
         updated[key] = {
-            "value": value,
-            "since": since,
+            "value": curr_norm,
+            "since": since.isoformat(),
             "alert_sent": alert_sent
         }
 
