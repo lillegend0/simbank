@@ -115,6 +115,7 @@ def monitor():
     now_iso = now.isoformat()
 
     alerts = []
+    recoveries = []
     updated = {}
 
     for key, value in current.items():
@@ -127,28 +128,30 @@ def monitor():
         curr_norm = value if value else "N"
         prev_norm = prev_val if prev_val else "N"
 
-        # Обнаружено изменение
+        # Если статус изменился — обновить таймер
         if curr_norm != prev_norm:
-            since = now
-            alert_sent = False
             log(f"{key} изменился: {prev_norm} → {curr_norm}")
+            since = now
 
-        # Если текущий статус "N"
+        duration = now - since
+
         if curr_norm == "N":
-            duration = now - since
             if duration >= timedelta(minutes=2):
                 if not alert_sent:
                     alerts.append(f"❌ <b>{key}</b> отключено более 2 минут.")
                     alert_sent = True
-                    log(f"{key} отключено более 2 минут.")
+                    log(f"{key} отключено более 2 минут — алерт отправлен.")
                 else:
-                    log(f"{key} уже алертировано.")
+                    log(f"{key} всё ещё отключено — алерт уже был.")
             else:
-                log(f"{key} отключено менее 2 минут — ожидание.")
+                log(f"{key} отключено менее 2 минут — ждем.")
         else:
-            if prev_norm == "N":
-                log(f"{key} восстановилось — алерт не отправлялся.")
-            alert_sent = False  # сбросить флаг, даже если он был
+            if prev_norm == "N" and alert_sent:
+                recoveries.append(f"✅ <b>{key}</b> восстановилось.")
+                log(f"{key} восстановилось после отключения — отправка уведомления.")
+            else:
+                log(f"{key} в норме, изменений нет.")
+            alert_sent = False  # сброс флага
 
         updated[key] = {
             "value": curr_norm,
@@ -158,12 +161,16 @@ def monitor():
 
     if alerts:
         send_telegram("\n".join(alerts) + "\n\n" + summary)
-        log("Уведомление отправлено: " + " | ".join(alerts))
-    else:
+        log("⚠ Отправлены алерты: " + " | ".join(alerts))
+
+    if recoveries:
+        send_telegram("\n".join(recoveries))
+        log("✅ Отправлены уведомления о восстановлении: " + " | ".join(recoveries))
+
+    if not alerts and not recoveries:
         log("Изменений нет или не прошло 2 минуты.")
 
     save_statuses(updated)
-
 
 if __name__ == "__main__":
     monitor()
